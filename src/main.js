@@ -50,7 +50,7 @@ const verbs = new Verbs({ dog, controller, scene: engine.scene, items, events })
 const npcs = createNpcs({ world, events });
 engine.scene.add(npcs.group);
 
-const quests = createQuests({ world, items, verbs, npcs, events }).start();
+const quests = createQuests({ world, items, verbs, npcs, events });
 
 // --- Phase 4: HUD, screens, audio ------------------------------------------
 
@@ -63,6 +63,10 @@ const ui = createUI({
   onPause: () => audio.pause(),
   onResume: () => audio.resume(),
 });
+
+// Only now, with the HUD subscribed, does the arc emit its first objective —
+// otherwise the tutorial line for beat 1 goes out to an empty bus.
+quests.start();
 
 // The credits take over the screen; let go of the mouse so the buttons work.
 events.on('game:ended', () => document.exitPointerLock());

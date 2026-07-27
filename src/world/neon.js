@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MATS, NEON, neonMaterial, makeRng, range } from './layout.js';
 
 /**
@@ -12,6 +13,20 @@ import { MATS, NEON, neonMaterial, makeRng, range } from './layout.js';
 const _tmp = new THREE.Vector3();
 
 /**
+ * Bulbs never flicker, so they belong in the static batch. One shared material
+ * per colour is what lets every pennant string in the district merge down to a
+ * couple of draw calls instead of ~90.
+ */
+const _bulbGeometry = new THREE.SphereGeometry(0.09, 6, 4);
+const _bulbMaterials = new Map();
+
+function bulbMaterial(color) {
+  let mat = _bulbMaterials.get(color);
+  if (!mat) _bulbMaterials.set(color, (mat = neonMaterial(color)));
+  return mat;
+}
+
+/**
  * Call sites specify light strength in readable "brightness" units (2–10);
  * three.js point lights are physical (inverse-square with decay 2), so they get
  * scaled up here rather than at every call site.
@@ -19,8 +34,9 @@ const _tmp = new THREE.Vector3();
 const LIGHT_GAIN = 8;
 
 export class NeonSystem {
-  constructor(group) {
+  constructor(group, batcher) {
     this.group = group;
+    this.batcher = batcher;
     this.flickers = [];
     this.lights = [];
     this.t = 0;
@@ -37,14 +53,13 @@ export class NeonSystem {
     mesh.rotation.y = ry;
     this.group.add(mesh);
 
+    // The backing board never flickers, so it goes in the static batch.
     if (backing) {
-      const back = new THREE.Mesh(
-        new THREE.BoxGeometry(w + 0.3, h + 0.3, 0.25),
+      this.batcher.box(
         MATS.metalDark,
+        x - Math.sin(ry) * 0.16, y, z - Math.cos(ry) * 0.16,
+        w + 0.3, h + 0.3, 0.25, ry,
       );
-      back.position.set(x - Math.sin(ry) * 0.16, y, z - Math.cos(ry) * 0.16);
-      back.rotation.y = ry;
-      this.group.add(back);
     }
 
     let pointLight = null;
@@ -70,7 +85,9 @@ export class NeonSystem {
   letterSign(x, y, z, color, { ry = 0, glyphs = 4, seed = 7, flicker = null, light = 2.5 } = {}) {
     const rng = makeRng(seed);
     const mat = neonMaterial(color);
-    const group = new THREE.Group();
+    // All the strokes share one material and flicker together, so they merge
+    // into a single mesh — a sign is one draw call, not a dozen.
+    const bars = [];
     let cursor = 0;
     for (let i = 0; i < glyphs; i++) {
       const gw = range(rng, 0.5, 0.9);
@@ -81,18 +98,17 @@ export class NeonSystem {
         const len = vertical ? gh * range(rng, 0.5, 1) : gw * range(rng, 0.6, 1);
         const bx = cursor + range(rng, 0, gw - 0.1);
         const by = range(rng, -gh / 2, gh / 2 - 0.1);
-        const bar = new THREE.Mesh(
-          new THREE.BoxGeometry(vertical ? 0.12 : len, vertical ? len : 0.12, 0.12),
-          mat,
-        );
-        bar.position.set(bx, by, 0);
-        group.add(bar);
+        const bar = new THREE.BoxGeometry(vertical ? 0.12 : len, vertical ? len : 0.12, 0.12);
+        bar.translate(bx, by, 0);
+        bars.push(bar);
       }
       cursor += gw + 0.3;
     }
-    group.position.set(x - Math.cos(ry) * cursor / 2, y, z + Math.sin(ry) * cursor / 2);
-    group.rotation.y = ry;
-    this.group.add(group);
+    const glyphMesh = new THREE.Mesh(mergeGeometries(bars, false), mat);
+    for (const g of bars) g.dispose();
+    glyphMesh.position.set(x - Math.cos(ry) * cursor / 2, y, z + Math.sin(ry) * cursor / 2);
+    glyphMesh.rotation.y = ry;
+    this.group.add(glyphMesh);
 
     let pointLight = null;
     if (light > 0) {
@@ -107,7 +123,7 @@ export class NeonSystem {
         phase: Math.random() * 10, ...FLICKER[flicker],
       });
     }
-    return group;
+    return glyphMesh;
   }
 
   /** Street lamp: post + head + cone of light. Adds its own collider. */
@@ -120,9 +136,8 @@ export class NeonSystem {
       new THREE.Vector3(x + 0.22, height, z + 0.22),
     ));
 
-    const bulb = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, 0.35), neonMaterial(color));
-    bulb.position.set(x, height - 0.1, z);
-    this.group.add(bulb);
+    // The lamp head is static emissive geometry; only the light moves.
+    batcher.box(bulbMaterial(color), x, height - 0.1, z, 0.7, 0.1, 0.35);
 
     const light = new THREE.PointLight(color, intensity * LIGHT_GAIN, 24, 2);
     light.position.set(x, height - 0.3, z);
@@ -151,14 +166,13 @@ export class NeonSystem {
   bulbString(ctx, from, to, { sag = 1.2, count = 9, color = NEON.yellow } = {}) {
     this.cable(ctx, from, to, { sag });
     const rng = makeRng(Math.floor(from.x * 13 + to.z * 7) + 1000);
-    const mat = neonMaterial(color);
     for (let i = 1; i < count; i++) {
       const t = i / count;
       _tmp.lerpVectors(from, to, t);
       _tmp.y -= Math.sin(t * Math.PI) * sag + 0.16;
-      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 4), rng() < 0.25 ? neonMaterial(NEON.pink) : mat);
-      bulb.position.copy(_tmp);
-      this.group.add(bulb);
+      ctx.batcher.add(_bulbGeometry, bulbMaterial(rng() < 0.25 ? NEON.pink : color), {
+        x: _tmp.x, y: _tmp.y, z: _tmp.z,
+      });
     }
   }
 

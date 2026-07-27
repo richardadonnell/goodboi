@@ -125,6 +125,10 @@ export function createUI({ events, dom, onStart, onResume, onPause } = {}) {
     if (state !== 'playing') return;
     state = 'paused';
     el.pause.classList.remove('hidden');
+    // Always hand the mouse back. Escape usually releases the lock for us, but
+    // when it doesn't the cursor stays captured by the canvas and every click
+    // on Resume / Restart lands on the game instead of the button.
+    try { document.exitPointerLock?.(); } catch { /* ignore */ }
     onPause?.();
   }
 
@@ -235,6 +239,9 @@ export function createUI({ events, dom, onStart, onResume, onPause } = {}) {
   // --- ticking timers -------------------------------------------------------
 
   function update(dt) {
+    // Banners shouldn't burn down behind the start or pause screen — the first
+    // objective is posted before the player has clicked into the game.
+    if (state === 'start' || state === 'paused') return;
     if (objectiveTimer > 0 && (objectiveTimer -= dt) <= 0) show(el.objective, false);
     if (dialogueTimer > 0 && (dialogueTimer -= dt) <= 0) show(el.dialogue, false);
     if (boneTimer > 0 && (boneTimer -= dt) <= 0) el.bones.classList.remove('pop');

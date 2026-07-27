@@ -41,7 +41,7 @@ export function createWorld() {
   const group = new THREE.Group();
   const colliders = [];
   const batcher = new Batcher();
-  const neon = new NeonSystem(group);
+  const neon = new NeonSystem(group, batcher);
   const rng = makeRng(20260727);
   const ctx = { group, batcher, colliders, rng, neon };
 
