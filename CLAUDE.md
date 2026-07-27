@@ -31,7 +31,15 @@ npm run preview  # serve the production build locally
 
 ## Architecture Notes
 
-Nothing built yet. When code exists, keep this section updated with the big-picture structure (scene management, game loop, input handling, asset pipeline) rather than per-file listings.
+`src/main.js` wires the pieces together and owns the per-step update order; nothing else knows about anything else.
+
+- **`src/core`** — `Engine` (renderer, scene, fixed-timestep loop, optional `EffectComposer` draw path via `setComposer`), `Input`, `FollowCamera`. No game logic.
+- **`src/dog`** — procedural dog mesh, `DogAnimator`, and `DogController` (axis-separated AABB resolution against an array of `THREE.Box3`; no physics engine).
+- **`src/world`** — the city district. `index.js` assembles and exports the world contract: `{ group, colliders, spawn, spawnYaw, groundY, fog, background, lights, locations, elevator, gates, update(dt) }`. `layout.js` holds the palette, shared materials, and the `Batcher` that merges all static geometry into ~one draw call per material. `buildings.js` / `neon.js` / `props.js` / `atmosphere.js` are pure builders writing into that batcher.
+
+`world.locations` is the handshake with later phases: every quest beat, dig spot, NPC slot, and collectible position is a named vector there, so quest code never hardcodes coordinates.
+
+Keep this section updated with big-picture structure rather than per-file listings.
 
 Guiding constraints for future work:
 

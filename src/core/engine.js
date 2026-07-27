@@ -20,7 +20,7 @@ export class Engine {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     if (!canvas) document.body.appendChild(this.renderer.domElement);
@@ -30,6 +30,10 @@ export class Engine {
 
     this.updaters = [];
     this.renderers = [];
+
+    // Optional postprocessing chain (see world/atmosphere.js). When set, the
+    // composer draws instead of the renderer.
+    this.composer = null;
 
     this._running = false;
     this._accumulator = 0;
@@ -50,6 +54,17 @@ export class Engine {
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(w, h);
+    if (this.composer) {
+      this.composer.setPixelRatio(this.renderer.getPixelRatio());
+      this.composer.setSize(w, h);
+    }
+  }
+
+  /** Swap in a postprocessing chain (EffectComposer) as the draw path. */
+  setComposer(composer) {
+    this.composer = composer;
+    this.resize();
+    return composer;
   }
 
   start() {
@@ -84,6 +99,7 @@ export class Engine {
 
     const alpha = this._accumulator / FIXED_DT;
     for (const fn of this.renderers) fn(alpha, elapsed);
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) this.composer.render(elapsed);
+    else this.renderer.render(this.scene, this.camera);
   }
 }

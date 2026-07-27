@@ -1,21 +1,22 @@
-import * as THREE from 'three';
 import { Engine } from './core/engine.js';
 import { Input } from './core/input.js';
 import { FollowCamera } from './core/camera.js';
 import { createDog } from './dog/model.js';
 import { DogAnimator } from './dog/animation.js';
 import { DogController, SPEEDS } from './dog/controller.js';
-import { createTestScene } from './world/testScene.js';
+import { createWorld, createComposer } from './world/index.js';
 
 const engine = new Engine();
 const input = new Input(engine.renderer.domElement);
 
-// Phase 2 swaps this for the real city district — same world contract.
-const world = createTestScene();
-engine.scene.add(world.root);
+const world = createWorld();
+engine.scene.add(world.group);
 engine.scene.fog = world.fog;
-engine.scene.background = new THREE.Color(0x0a0b10);
+engine.scene.background = world.background;
 for (const light of world.lights) engine.scene.add(light);
+
+// Neon-heavy night scene: bloom is doing most of the mood work.
+engine.setComposer(createComposer(engine.renderer, engine.scene, engine.camera));
 
 const dog = createDog();
 engine.scene.add(dog.group);
@@ -50,7 +51,14 @@ engine.onUpdate((dt) => {
 
   // Verb stubs — wired up properly in Phase 3.
   if (input.wasPressed('bark')) console.log('woof');
-  if (input.wasPressed('interact')) console.log('interact');
+  if (input.wasPressed('interact')) {
+    // Phase 3 gates this behind the fuse; for now F near the shaft rides it.
+    if (controller.position.distanceTo(world.locations.elevator) < 4) {
+      world.elevator.enable();
+      world.elevator.call();
+    }
+    console.log('interact');
+  }
   if (input.wasPressed('dig')) console.log('dig');
   if (input.wasPressed('pause')) document.exitPointerLock();
 
@@ -60,3 +68,6 @@ engine.onUpdate((dt) => {
 });
 
 engine.start();
+
+// Debug handle — lets us poke at the world from the console during development.
+window.goodboi = { engine, world, dog, controller, follow };
