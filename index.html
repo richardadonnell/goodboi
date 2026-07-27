@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <title>GoodBoi</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>%F0%9F%90%B6</text></svg>" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0b10;
+        color: #cfd3e0;
+        font-family: system-ui, sans-serif;
+      }
+      canvas { display: block; }
+      #hint {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%);
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        opacity: 0.55;
+        pointer-events: none;
+        user-select: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hint">click to look &middot; WASD move &middot; shift run &middot; space jump &middot; B bark &middot; Q sniff &middot; F interact &middot; X dig &middot; Esc release</div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
