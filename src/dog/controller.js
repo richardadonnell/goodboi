@@ -8,10 +8,20 @@ const GROUND_ACCEL = 22;
 const AIR_ACCEL = 6;
 const TURN_RATE = 11;      // radians/sec toward the move direction
 const GROUND_EPS = 0.06;   // snap tolerance for staying "grounded"
+const STEP_HEIGHT = 0.35;  // knee height: ledges up to this get stepped onto
+const SKIN = 0.02;         // ignore contacts thinner than this (touching != penetrating)
+const MAX_SUB = 0.12;      // max displacement per collision substep (< half the thinnest collider)
+const MAX_PASSES = 4;      // depenetration passes per axis
 
 /**
  * Axis-separated AABB character controller. No physics engine; the world hands us
- * an array of THREE.Box3 colliders and a ground height.
+ * an array of THREE.Box3 colliders, a ground height and a containment box.
+ *
+ * Movement is substepped (≤ MAX_SUB per step, so nothing tunnels through a thin
+ * wall) and each substep resolves X, then Z, then Y. Horizontal penetration is
+ * always resolved horizontally — by penetration depth, not by direction of
+ * travel — so overlapping colliders can neither pop the dog onto a box's top
+ * edge nor shove it out through a wall. `bounds` is the final backstop.
  *
  * const dog = new DogController({ colliders, spawn, radius, height });
  * dog.update(dt, { input, camera })   -> camera is a FollowCamera (for camera-relative move)
@@ -21,11 +31,14 @@ const GROUND_EPS = 0.06;   // snap tolerance for staying "grounded"
  * dog.setColliders(boxes)             -> Phase 2 swaps the world in
  */
 export class DogController {
-  constructor({ colliders = [], spawn = new THREE.Vector3(), radius = 0.35, height = 1.1, groundY = 0 } = {}) {
+  constructor({ colliders = [], spawn = new THREE.Vector3(), radius = 0.35, height = 1.1, groundY = 0, bounds = null } = {}) {
     this.colliders = colliders;
     this.radius = radius;
     this.height = height;
     this.groundY = groundY;
+    // Hard containment box for the paws — the dog can never leave it, whatever
+    // the colliders do. { min: Vector3, max: Vector3 } in world space.
+    this.bounds = bounds;
 
     this.position = new THREE.Vector3().copy(spawn);
     this.velocity = new THREE.Vector3();
@@ -36,7 +49,6 @@ export class DogController {
     this.speedScale = 1;   // verbs slow the dog down (sniffing, digging)
 
     this._box = new THREE.Box3();
-    this._probe = new THREE.Box3();
     this._wish = new THREE.Vector3();
     this._forward = new THREE.Vector3();
     this._right = new THREE.Vector3();
@@ -85,10 +97,8 @@ export class DogController {
 
     this.velocity.y -= GRAVITY * dt;
 
-    // --- move + resolve, one axis at a time so sliding along walls works ---
-    this._moveAxis('x', this.velocity.x * dt);
-    this._moveAxis('z', this.velocity.z * dt);
-    this._moveAxis('y', this.velocity.y * dt);
+    // --- move + resolve, substepped so nothing tunnels through thin walls ---
+    this._move(this.velocity.x * dt, this.velocity.y * dt, this.velocity.z * dt);
 
     // --- face the direction of travel ---
     if (wants) {
@@ -108,57 +118,137 @@ export class DogController {
     return target;
   }
 
-  _moveAxis(axis, delta) {
-    if (delta === 0) return;
-    this.position[axis] += delta;
+  /**
+   * Substepped move. Horizontal displacement is resolved horizontally only
+   * (X then Z, penetration-depth based) and vertical separately, so walking
+   * into a wall can never launch the dog onto its top edge.
+   */
+  _move(dx, dy, dz) {
+    const largest = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
+    const steps = Math.max(1, Math.min(16, Math.ceil(largest / MAX_SUB)));
+    const sx = dx / steps, sy = dy / steps, sz = dz / steps;
 
-    if (axis === 'y') {
-      this.grounded = false;
-      if (this.position.y <= this.groundY) {
-        this.position.y = this.groundY;
+    for (let i = 0; i < steps; i++) {
+      if (sx !== 0) { this.position.x += sx; this._resolveHorizontal('x', sx); }
+      if (sz !== 0) { this.position.z += sz; this._resolveHorizontal('z', sz); }
+      this._moveVertical(sy);
+      this._clampToBounds();
+    }
+  }
+
+  /**
+   * Push out of anything we horizontally overlap, along `axis` only, choosing
+   * the shorter way out rather than trusting the direction of travel — residual
+   * penetration from a neighbouring box then can't shove us through a wall.
+   * Low ledges are stepped onto instead of blocking.
+   */
+  _resolveHorizontal(axis, delta) {
+    for (let pass = 0; pass < MAX_PASSES; pass++) {
+      const collider = this._firstOverlap();
+      if (!collider) return;
+
+      // Step-up: a kerb/ledge below knee height we can stand on cleanly.
+      const rise = collider.max.y - this.position.y;
+      if (rise > 0 && rise <= STEP_HEIGHT && (this.grounded || this.velocity.y <= 0) && this._fitsAt(this.position.x, collider.max.y, this.position.z)) {
+        this.position.y = collider.max.y;
+        if (this.velocity.y < 0) this.velocity.y = 0;
+        this.grounded = true;
+        continue;
+      }
+
+      const outPos = collider.max[axis] + this.radius - this.position[axis];   // >= 0
+      const outNeg = collider.min[axis] - this.radius - this.position[axis];   // <= 0
+      const push = Math.abs(outPos) < Math.abs(outNeg) ? outPos : outNeg;
+      this.position[axis] += push;
+      if (push * delta < 0 || push * this.velocity[axis] < 0) this.velocity[axis] = 0;
+    }
+  }
+
+  _moveVertical(delta) {
+    this.grounded = false;
+    this.position.y += delta;
+
+    if (this.position.y <= this.groundY) {
+      this.position.y = this.groundY;
+      if (this.velocity.y < 0) this.velocity.y = 0;
+      this.grounded = true;
+    }
+
+    // Falling: land on the highest overlapping top. Rising: bonk the lowest underside.
+    let top = -Infinity, under = Infinity;
+    for (const c of this.colliders) {
+      if (!this._overlapsColumn(c)) continue;
+      if (c.max.y > this.position.y + SKIN && c.min.y < this.position.y + this.height - SKIN) {
+        if (delta <= 0 && c.max.y <= this.position.y + this.height * 0.5) top = Math.max(top, c.max.y);
+        else under = Math.min(under, c.min.y);
+      }
+    }
+    if (delta <= 0 && top > -Infinity) {
+      this.position.y = top;
+      if (this.velocity.y < 0) this.velocity.y = 0;
+      this.grounded = true;
+    } else if (delta > 0 && under < Infinity) {
+      this.position.y = Math.max(this.groundY, under - this.height);
+      if (this.velocity.y > 0) this.velocity.y = 0;
+    }
+
+    // A tiny probe below keeps `grounded` true (and snaps the paws down) while
+    // walking over seams — without it the dog sinks a skin's depth every frame.
+    if (!this.grounded && this.velocity.y <= 0) {
+      const surface = this._groundProbe();
+      if (surface !== null) {
+        this.position.y = surface;
         this.velocity.y = 0;
         this.grounded = true;
       }
     }
-
-    const box = this.getBox();
-    for (const collider of this.colliders) {
-      if (!box.intersectsBox(collider)) continue;
-
-      if (axis === 'y') {
-        if (delta < 0) {
-          // landed on top
-          this.position.y = collider.max.y;
-          this.grounded = true;
-        } else {
-          // bonked the underside
-          this.position.y = collider.min.y - this.height;
-        }
-        this.velocity.y = 0;
-      } else {
-        const half = this.radius;
-        if (delta > 0) this.position[axis] = collider.min[axis] - half;
-        else this.position[axis] = collider.max[axis] + half;
-        this.velocity[axis] = 0;
-      }
-      this.getBox(box);
-    }
-
-    // A tiny probe below keeps `grounded` true while walking over seams.
-    if (axis === 'y' && !this.grounded && this.velocity.y <= 0) {
-      this.grounded = this._groundProbe();
-    }
   }
 
-  _groundProbe() {
-    if (this.position.y - this.groundY <= GROUND_EPS) return true;
-    const probe = this._probe;
-    probe.min.set(this.position.x - this.radius, this.position.y - GROUND_EPS, this.position.z - this.radius);
-    probe.max.set(this.position.x + this.radius, this.position.y, this.position.z + this.radius);
-    for (const collider of this.colliders) {
-      if (probe.intersectsBox(collider)) return true;
+  /** Hard containment: the dog can never leave the playable box. */
+  _clampToBounds() {
+    const b = this.bounds;
+    if (!b) return;
+    const p = this.position;
+    p.x = Math.min(Math.max(p.x, b.min.x + this.radius), b.max.x - this.radius);
+    p.z = Math.min(Math.max(p.z, b.min.z + this.radius), b.max.z - this.radius);
+    if (p.y < b.min.y) { p.y = b.min.y; if (this.velocity.y < 0) this.velocity.y = 0; }
+    const ceil = b.max.y - this.height;
+    if (p.y > ceil) { p.y = ceil; if (this.velocity.y > 0) this.velocity.y = 0; }
+  }
+
+  /** First collider genuinely penetrating the body (touching contacts ignored). */
+  _firstOverlap(x = this.position.x, y = this.position.y, z = this.position.z) {
+    for (const c of this.colliders) {
+      if (c.max.y <= y + SKIN || c.min.y >= y + this.height - SKIN) continue;
+      if (c.max.x <= x - this.radius + SKIN || c.min.x >= x + this.radius - SKIN) continue;
+      if (c.max.z <= z - this.radius + SKIN || c.min.z >= z + this.radius - SKIN) continue;
+      return c;
     }
-    return false;
+    return null;
+  }
+
+  /** Body fits (no penetration) standing at this position? */
+  _fitsAt(x, y, z) {
+    return !this._firstOverlap(x, y, z);
+  }
+
+  /** Horizontal (XZ) overlap only, shrunk by the skin. */
+  _overlapsColumn(c) {
+    const p = this.position, r = this.radius - SKIN;
+    return c.max.x > p.x - r && c.min.x < p.x + r && c.max.z > p.z - r && c.min.z < p.z + r;
+  }
+
+  /** Height of the surface just under the paws, or null if there is none. */
+  _groundProbe() {
+    let surface = this.position.y - this.groundY <= GROUND_EPS ? this.groundY : null;
+    // Only a surface *below the paws* counts — a wall we're brushing past doesn't.
+    for (const c of this.colliders) {
+      if (!this._overlapsColumn(c)) continue;
+      if (c.max.y <= this.position.y + SKIN && c.max.y >= this.position.y - GROUND_EPS) {
+        surface = surface === null ? c.max.y : Math.max(surface, c.max.y);
+      }
+    }
+    return surface;
   }
 }
 

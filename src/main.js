@@ -32,6 +32,7 @@ const controller = new DogController({
   colliders: world.colliders,
   spawn: world.spawn,
   groundY: world.groundY,
+  bounds: world.bounds,
 });
 controller.yaw = world.spawnYaw;
 controller.maxSpeed = SPEEDS.RUN;

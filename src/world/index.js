@@ -72,6 +72,14 @@ export function createWorld() {
     spawn: locations.spawnAlley.clone(),
     spawnYaw: 0,               // facing -Z, up the alley
     groundY: GROUND_Y,
+    // Hard containment box: the inner faces of the outer wall ring (thickness 3,
+    // so the faces sit at ±58.5) plus a ceiling well under the 30m wall tops.
+    // The controller clamps to this every substep, so no amount of collider
+    // weirdness can put the dog outside the district or above it.
+    bounds: {
+      min: new THREE.Vector3(-BOUNDS + 1.5, GROUND_Y, -BOUNDS + 1.5),
+      max: new THREE.Vector3(BOUNDS - 1.5, GROUND_Y + 26, BOUNDS - 1.5),
+    },
     fog: createFog(),
     background: new THREE.Color(FOG_COLOR),
     lights,
@@ -216,7 +224,11 @@ function marketAlley(ctx, locations, updaters) {
 
   // south wall east of the gate, north wall along the whole run
   wall(ctx, MATS.wallMid, 21, 0, Z_S, 34, 13, 2);
-  wall(ctx, MATS.wallDark, 17, 0, Z_N, 46, 17, 2);
+  // The north wall runs the length of the alley, but the beat-4 catwalk route
+  // crosses it around x=-2 on its way north — so its west end is capped below
+  // the decks (y=9) and only the eastern run gets full height.
+  wall(ctx, MATS.wallDark, -3, 0, Z_N, 6, 9, 2);
+  wall(ctx, MATS.wallDark, 20, 0, Z_N, 40, 17, 2);
   wall(ctx, MATS.wallPurple, -6, 0, -1, 2, 14, 13);      // west cap
   wall(ctx, MATS.concrete, 38, 0, -1, 2, 12, 13);        // east cap behind the elevator
 
