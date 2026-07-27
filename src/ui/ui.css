@@ -1,0 +1,286 @@
+/* GoodBoi HUD + screens. Dark, minimal, neon accents matching the district. */
+
+:root {
+  --ui-ink: #d7dcec;
+  --ui-dim: #8b93ad;
+  --ui-cyan: #22e0ff;
+  --ui-pink: #ff2e88;
+  --ui-back: #05060b;
+  --ui-font: "Inter", "Segoe UI Variable Text", "Segoe UI", -apple-system,
+    BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --ui-mono: "Cascadia Mono", "SF Mono", "JetBrains Mono", ui-monospace,
+    "Consolas", monospace;
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  color: var(--ui-ink);
+  font-family: var(--ui-font);
+  pointer-events: none;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+#ui .hidden { display: none !important; }
+
+/* --- HUD ------------------------------------------------------------------ */
+
+.hud-objective {
+  position: absolute;
+  top: 42px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  max-width: 34rem;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  line-height: 1.4;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.hud-objective.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.hud-objective::before {
+  content: "";
+  display: block;
+  width: 34px;
+  height: 2px;
+  margin: 0 auto 10px;
+  background: var(--ui-cyan);
+  box-shadow: 0 0 12px var(--ui-cyan);
+  opacity: 0.85;
+}
+
+.hud-bones {
+  position: absolute;
+  top: 30px;
+  right: 34px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--ui-mono);
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  color: var(--ui-dim);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+  transition: color 0.3s ease, transform 0.3s ease;
+}
+.hud-bones svg { width: 22px; height: 22px; display: block; }
+.hud-bones.pop { color: var(--ui-cyan); transform: scale(1.18); }
+
+.hud-prompt {
+  position: absolute;
+  bottom: 92px;
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  padding: 7px 15px;
+  border: 1px solid rgba(34, 224, 255, 0.35);
+  border-radius: 3px;
+  background: rgba(5, 8, 16, 0.62);
+  backdrop-filter: blur(3px);
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.hud-prompt.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.hud-prompt b {
+  color: var(--ui-cyan);
+  font-family: var(--ui-mono);
+  font-weight: 600;
+}
+
+.hud-dialogue {
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  width: min(46rem, 84vw);
+  transform: translateX(-50%) translateY(10px);
+  padding: 16px 22px 18px;
+  border-left: 2px solid var(--ui-pink);
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(10, 6, 16, 0.88), rgba(8, 9, 18, 0.6));
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+.hud-dialogue.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.hud-dialogue .speaker {
+  display: block;
+  margin-bottom: 6px;
+  font-family: var(--ui-mono);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ui-pink);
+}
+.hud-dialogue .line { font-size: 17px; line-height: 1.5; }
+
+.hud-memory {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12vw;
+  text-align: center;
+  font-size: 22px;
+  font-style: italic;
+  line-height: 1.6;
+  color: #eef1fb;
+  background: radial-gradient(ellipse at center, rgba(4, 5, 10, 0.55), rgba(4, 5, 10, 0.9));
+  opacity: 0;
+  transition: opacity 0.9s ease;
+}
+.hud-memory.show { opacity: 1; }
+
+/* --- Screens -------------------------------------------------------------- */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+  pointer-events: auto;
+  background: radial-gradient(ellipse at 50% 45%, rgba(10, 14, 28, 0.72), rgba(3, 4, 8, 0.94));
+  backdrop-filter: blur(2px);
+  opacity: 1;
+  transition: opacity 0.6s ease;
+}
+.screen.fading { opacity: 0; }
+
+.title {
+  margin: 0;
+  font-size: clamp(52px, 11vw, 118px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #f2f5ff;
+  text-shadow: 0 0 26px rgba(34, 224, 255, 0.45), 0 0 70px rgba(255, 46, 136, 0.28);
+}
+.title em {
+  font-style: normal;
+  color: var(--ui-cyan);
+}
+
+.tagline {
+  margin: 0;
+  max-width: 30rem;
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--ui-dim);
+}
+
+.cta {
+  margin-top: 8px;
+  font-family: var(--ui-mono);
+  font-size: 14px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ui-cyan);
+  animation: pulse 2.2s ease-in-out infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+  justify-content: center;
+  max-width: 36rem;
+  margin-top: 26px;
+  font-size: 13px;
+  color: var(--ui-dim);
+}
+.legend div { display: flex; align-items: center; gap: 9px; }
+.legend kbd {
+  min-width: 1.9em;
+  padding: 3px 6px;
+  border: 1px solid rgba(139, 147, 173, 0.35);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  font-family: var(--ui-mono);
+  font-size: 11px;
+  text-align: center;
+  color: var(--ui-ink);
+}
+
+.screen h2 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.btn {
+  pointer-events: auto;
+  margin-top: 4px;
+  padding: 11px 30px;
+  border: 1px solid rgba(34, 224, 255, 0.5);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--ui-cyan);
+  font-family: var(--ui-mono);
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.btn:hover {
+  background: rgba(34, 224, 255, 0.12);
+  color: #eafcff;
+  box-shadow: 0 0 22px rgba(34, 224, 255, 0.25);
+}
+.btn.ghost {
+  border-color: rgba(139, 147, 173, 0.35);
+  color: var(--ui-dim);
+}
+.btn.ghost:hover { background: rgba(255, 255, 255, 0.06); color: var(--ui-ink); }
+
+.stats {
+  display: flex;
+  gap: 40px;
+  margin: 6px 0 4px;
+}
+.stats div {
+  font-family: var(--ui-mono);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ui-dim);
+}
+.stats strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 30px;
+  letter-spacing: 0;
+  color: var(--ui-cyan);
+  font-weight: 600;
+}
+
+.credits {
+  margin-top: 22px;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: #5d6480;
+}
+
+/* The ending fades the whole world to black before the credits arrive. */
+#ui .blackout {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  transition: opacity 2.2s ease;
+}
+#ui .blackout.on { opacity: 1; }

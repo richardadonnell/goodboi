@@ -44,6 +44,9 @@ npm run preview  # serve the production build locally
 
 `src/core/events.js` is the other handshake — a tiny pub/sub the game logic emits into (`objective:changed`, `prompt:show/hide`, `dialogue:show`, `bone:collected`, `game:ended`, …). Nothing under `src/quests`, `src/npc` or `src/dog` touches the DOM; the HUD subscribes.
 
+- **`src/ui`** — the only code that touches the DOM. `createUI({ events, dom })` builds one `#ui` overlay (styled by `ui.css`) holding the HUD (objective banner, bone counter, interaction prompt, dialogue box, memory card) and the start / pause / ending screens. It subscribes to the bus and exposes `ui.playing`, which is the gate `main.js` uses to skip the simulation on the start and pause screens.
+- **`src/audio`** — `createAudio({ events })`: every sound synthesized in WebAudio, no files. An ambient pad (detuned saws through an LFO-swept lowpass) plus one-shots for bark, footsteps, pickup, dig, quest sting and the ending chord. Nothing exists until `start()` runs from the start-screen click, since browsers require a gesture; footsteps are driven from `audio.update(dt, controller)`.
+
 The dog's verbs live in `src/dog/verbs.js` (bark / sniff / fetch-carry / dig) with their effects in `vfx.js`. Verbs run *after* `DogAnimator` each step and layer pose offsets over the gait, so the animator stays ignorant of them. Quests get first refusal on the F key and tell Verbs whether the press was consumed.
 
 Keep this section updated with big-picture structure rather than per-file listings.

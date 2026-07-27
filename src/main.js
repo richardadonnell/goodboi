@@ -10,6 +10,8 @@ import { Verbs } from './dog/verbs.js';
 import { createWorld, createComposer } from './world/index.js';
 import { createNpcs } from './npc/index.js';
 import { createQuests, Items } from './quests/index.js';
+import { createUI } from './ui/index.js';
+import { createAudio } from './audio/index.js';
 
 const engine = new Engine();
 const input = new Input(engine.renderer.domElement);
@@ -50,12 +52,35 @@ engine.scene.add(npcs.group);
 
 const quests = createQuests({ world, items, verbs, npcs, events }).start();
 
-// Phase 4 owns the credits screen; here we just let go of the mouse.
+// --- Phase 4: HUD, screens, audio ------------------------------------------
+
+const audio = createAudio({ events });
+
+const ui = createUI({
+  events,
+  dom: engine.renderer.domElement,
+  onStart: () => audio.start(),
+  onPause: () => audio.pause(),
+  onResume: () => audio.resume(),
+});
+
+// The credits take over the screen; let go of the mouse so the buttons work.
 events.on('game:ended', () => document.exitPointerLock());
 
 const NO_LOOK = { x: 0, y: 0 };
 
 engine.onUpdate((dt) => {
+  ui.update(dt);
+
+  // Start screen / pause: the world keeps drawing and drifting, but nothing
+  // simulates and no input is read.
+  if (!ui.playing) {
+    world.update?.(dt);
+    follow.update(dt, controller.position);
+    input.consume();
+    return;
+  }
+
   // While a cinematic or the ending is running, the dog stops taking orders.
   const locked = quests.inputLocked;
   const playerInput = locked ? null : input;
@@ -83,6 +108,7 @@ engine.onUpdate((dt) => {
 
   npcs.update(dt, controller.position);
   world.update?.(dt);
+  audio.update(dt, controller);
 
   if (input.wasPressed('pause')) document.exitPointerLock();
 
@@ -96,4 +122,4 @@ engine.onUpdate((dt) => {
 engine.start();
 
 // Debug handle — lets us poke at the world from the console during development.
-window.goodboi = { engine, world, dog, controller, follow, verbs, items, npcs, quests, events };
+window.goodboi = { engine, world, dog, controller, follow, verbs, items, npcs, quests, events, ui, audio };
