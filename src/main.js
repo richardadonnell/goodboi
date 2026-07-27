@@ -1,10 +1,15 @@
+import * as THREE from 'three';
 import { Engine } from './core/engine.js';
 import { Input } from './core/input.js';
 import { FollowCamera } from './core/camera.js';
+import { events } from './core/events.js';
 import { createDog } from './dog/model.js';
 import { DogAnimator } from './dog/animation.js';
 import { DogController, SPEEDS } from './dog/controller.js';
+import { Verbs } from './dog/verbs.js';
 import { createWorld, createComposer } from './world/index.js';
+import { createNpcs } from './npc/index.js';
+import { createQuests, Items } from './quests/index.js';
 
 const engine = new Engine();
 const input = new Input(engine.renderer.domElement);
@@ -33,10 +38,31 @@ const animator = new DogAnimator(dog);
 const follow = new FollowCamera(engine.camera, { distance: 6, height: 1.6 });
 follow.yaw = world.spawnYaw;
 
-engine.onUpdate((dt) => {
-  follow.orbit(input.mouseDelta);
+// --- Phase 3: verbs, NPCs, quests ------------------------------------------
 
-  controller.update(dt, { input, camera: follow });
+const items = new Items();
+engine.scene.add(items.group);
+
+const verbs = new Verbs({ dog, controller, scene: engine.scene, items, events });
+
+const npcs = createNpcs({ world, events });
+engine.scene.add(npcs.group);
+
+const quests = createQuests({ world, items, verbs, npcs, events }).start();
+
+// Phase 4 owns the credits screen; here we just let go of the mouse.
+events.on('game:ended', () => document.exitPointerLock());
+
+const NO_LOOK = { x: 0, y: 0 };
+
+engine.onUpdate((dt) => {
+  // While a cinematic or the ending is running, the dog stops taking orders.
+  const locked = quests.inputLocked;
+  const playerInput = locked ? null : input;
+
+  follow.orbit(locked ? NO_LOOK : input.mouseDelta);
+
+  controller.update(dt, { input: playerInput, camera: follow });
 
   dog.group.position.copy(controller.position);
   dog.group.rotation.y = controller.yaw;
@@ -47,22 +73,22 @@ engine.onUpdate((dt) => {
     grounded: controller.grounded,
   });
 
-  follow.update(dt, controller.position);
+  items.update(dt);
 
-  // Verb stubs — wired up properly in Phase 3.
-  if (input.wasPressed('bark')) console.log('woof');
-  if (input.wasPressed('interact')) {
-    // Phase 3 gates this behind the fuse; for now F near the shaft rides it.
-    if (controller.position.distanceTo(world.locations.elevator) < 4) {
-      world.elevator.enable();
-      world.elevator.call();
-    }
-    console.log('interact');
-  }
-  if (input.wasPressed('dig')) console.log('dig');
+  // Quests get first refusal on F so handing over an item beats picking one up.
+  const { interactHandled } = quests.update(dt, { input, controller });
+
+  // Verbs run after the animator: they layer pose offsets over the gait.
+  verbs.update(dt, playerInput, { blockInteract: interactHandled });
+
+  npcs.update(dt, controller.position);
+  world.update?.(dt);
+
   if (input.wasPressed('pause')) document.exitPointerLock();
 
-  world.update?.(dt);
+  // Cinematics pull the camera in close; the rest of the time this is a no-op.
+  follow.distance = THREE.MathUtils.lerp(follow.distance, quests.cameraDistance, Math.min(1, dt * 3));
+  follow.update(dt, controller.position);
 
   input.consume();
 });
@@ -70,4 +96,4 @@ engine.onUpdate((dt) => {
 engine.start();
 
 // Debug handle — lets us poke at the world from the console during development.
-window.goodboi = { engine, world, dog, controller, follow };
+window.goodboi = { engine, world, dog, controller, follow, verbs, items, npcs, quests, events };

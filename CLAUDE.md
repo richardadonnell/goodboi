@@ -37,7 +37,14 @@ npm run preview  # serve the production build locally
 - **`src/dog`** — procedural dog mesh, `DogAnimator`, and `DogController` (axis-separated AABB resolution against an array of `THREE.Box3`; no physics engine).
 - **`src/world`** — the city district. `index.js` assembles and exports the world contract: `{ group, colliders, spawn, spawnYaw, groundY, fog, background, lights, locations, elevator, gates, update(dt) }`. `layout.js` holds the palette, shared materials, and the `Batcher` that merges all static geometry into ~one draw call per material. `buildings.js` / `neon.js` / `props.js` / `atmosphere.js` are pure builders writing into that batcher.
 
+- **`src/npc`** — `Robot` (boxy procedural bot, canvas-texture screen face + floating dialogue billboard) and `Pigeons` (flock that scatters on a bark). `index.js` places Lampy and the two side-quest bots at `world.locations`.
+- **`src/quests`** — `index.js` is the whole arc as a flat, ordered list of steps; each owns its objective text, sniff-trail route, optional F-interaction and a `check()` that advances it. `items.js` holds the procedural carryables (wrench, fuse, ball, bone, collar tag) and the dig mounds.
+
 `world.locations` is the handshake with later phases: every quest beat, dig spot, NPC slot, and collectible position is a named vector there, so quest code never hardcodes coordinates.
+
+`src/core/events.js` is the other handshake — a tiny pub/sub the game logic emits into (`objective:changed`, `prompt:show/hide`, `dialogue:show`, `bone:collected`, `game:ended`, …). Nothing under `src/quests`, `src/npc` or `src/dog` touches the DOM; the HUD subscribes.
+
+The dog's verbs live in `src/dog/verbs.js` (bark / sniff / fetch-carry / dig) with their effects in `vfx.js`. Verbs run *after* `DogAnimator` each step and layer pose offsets over the gait, so the animator stays ignorant of them. Quests get first refusal on the F key and tell Verbs whether the press was consumed.
 
 Keep this section updated with big-picture structure rather than per-file listings.
 

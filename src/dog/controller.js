@@ -33,6 +33,7 @@ export class DogController {
     this.speed = 0;
     this.grounded = true;
     this.maxSpeed = RUN_SPEED;
+    this.speedScale = 1;   // verbs slow the dog down (sniffing, digging)
 
     this._box = new THREE.Box3();
     this._probe = new THREE.Box3();
@@ -67,7 +68,7 @@ export class DogController {
     if (wants) this._wish.normalize();
 
     const running = input?.isDown('run');
-    const target = wants ? (running ? RUN_SPEED : WALK_SPEED) : 0;
+    const target = wants ? (running ? RUN_SPEED : WALK_SPEED) * this.speedScale : 0;
     const accel = this.grounded ? GROUND_ACCEL : AIR_ACCEL;
 
     // Accelerate horizontal velocity toward the target vector.
